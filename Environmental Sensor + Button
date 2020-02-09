@@ -1,0 +1,142 @@
+#include <Arduino.h>
+#include <U8g2lib.h>
+#include <Wire.h>
+
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BME280.h>
+#include "SparkFunCCS811.h"
+
+#define BME_SCK 1
+#define BME_MISO 12
+#define BME_MOSI 11
+#define BME_CS 10
+
+#define CCS811_ADDR 0x5B
+
+#define SEALEVELPRESSURE_HPA (1013.25)
+
+unsigned long delayTime;
+
+U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R3, /* clock=*/ SCL, /* data=*/ SDA, /* reset=*/ U8X8_PIN_NONE);
+
+Adafruit_BME280 bme;
+
+CCS811 ccs(CCS811_ADDR);
+
+const int buttonPin = 2;
+
+
+byte oldButtonState = HIGH;
+int screenNumber = 0;
+byte buttonState = 0;
+
+void setup(void) {
+  u8g2.begin();
+  u8g2.setPowerSave(0);
+  Wire.begin();
+  
+  pinMode(buttonPin, INPUT_PULLUP);
+ 
+  unsigned status;
+  status = bme.begin();
+  
+  if (ccs.begin() == false)
+  {
+    Serial.print("CCS811 error.");
+    while (1);
+      ;
+  }
+}
+
+void loop()
+{
+  buttonState = digitalRead(buttonPin);
+
+  if (buttonState == HIGH) {
+    u8g2.clear();
+    u8g2.updateDisplay();
+    oldButtonState = buttonState;
+    if (screenNumber <=5) {
+      ++screenNumber;
+    }
+    else if (screenNumber > 5) {
+     screenNumber = 1;
+    }
+
+    delay(250);
+    }
+  
+        if (screenNumber == 1)
+  {
+        u8g2.clearBuffer();
+        int t;
+        t = round(bme.readTemperature() * 100.0) / 100.0;
+        u8g2.setFont(u8g2_font_ncenB08_tr);
+        u8g2.setCursor(25,128);
+        u8g2.print(t);
+        u8g2.sendBuffer();
+  }
+
+  else if (screenNumber == 2)
+  {
+        u8g2.clearBuffer();
+        int h;
+        h = round((bme.readHumidity()) * 100.0) / 100.0;
+        u8g2.setFont(u8g2_font_ncenB08_tr);
+        u8g2.setCursor(25,128);
+        u8g2.print(h);
+        u8g2.sendBuffer();
+  }
+  else if (screenNumber == 3)
+  {
+        u8g2.clearBuffer();
+        int p;
+        p = round((bme.readPressure() / 100.0F) * 100.0) / 100.0;
+        u8g2.setFont(u8g2_font_ncenB08_tr);
+        u8g2.setCursor(25,128);
+        u8g2.print(p);
+        u8g2.sendBuffer();
+  }
+  else if (screenNumber == 4)
+  {
+        u8g2.clearBuffer();
+        int a;
+        a = round(bme.readAltitude(SEALEVELPRESSURE_HPA) * 100.0) / 100.0 + 65;
+        u8g2.setFont(u8g2_font_ncenB08_tr);
+        u8g2.setCursor(25,128);
+        u8g2.print(a);
+        u8g2.sendBuffer();
+  }
+  else if (screenNumber == 5)
+  {
+        if (ccs.dataAvailable())
+      {
+       ccs.readAlgorithmResults();
+        u8g2.clearBuffer();
+        int c = (ccs.getCO2());
+        u8g2.setFont(u8g2_font_ncenB08_tr);
+        u8g2.setCursor(25,128);
+        u8g2.print(c);
+        float BMEtempC = bme.readTemperature();
+        float BMEhumid = bme.readHumidity();
+        ccs.setEnvironmentalData(BMEhumid, BMEtempC);
+        u8g2.sendBuffer();
+      }
+  }
+  else if (screenNumber == 6)
+  {
+        if (ccs.dataAvailable())
+      {
+        ccs.readAlgorithmResults();
+        u8g2.clearBuffer();
+        int v = (ccs.getTVOC());
+        u8g2.setFont(u8g2_font_ncenB08_tr);
+        u8g2.setCursor(25,128)    ;
+        u8g2.print(v);
+        float BMEtempC = bme.readTemperature();
+        float BMEhumid = bme.readHumidity();
+        ccs.setEnvironmentalData(BMEhumid, BMEtempC);
+        u8g2.sendBuffer();
+      }
+  }
+}
