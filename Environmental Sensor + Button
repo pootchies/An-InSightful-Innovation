@@ -1,3 +1,4 @@
+//===================================INTITIAL DEFINITIONS===================================
 #include <Arduino.h>
 #include <U8g2lib.h>
 #include <Wire.h>
@@ -10,104 +11,173 @@
 #define BME_MISO 12
 #define BME_MOSI 11
 #define BME_CS 10
-
 #define CCS811_ADDR 0x5B
-
 #define SEALEVELPRESSURE_HPA (1013.25)
 
+U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R3, /* clock=*/ 18, /* data=*/ 17, /* reset=*/ U8X8_PIN_NONE);
+
 unsigned long delayTime;
-
-U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R3, /* clock=*/ SCL, /* data=*/ SDA, /* reset=*/ U8X8_PIN_NONE);
-
 Adafruit_BME280 bme;
-
 CCS811 ccs(CCS811_ADDR);
 
-const int buttonPin = 2;
+const byte buzzer = 9;
 
+const byte ledPin = 19;
 
-byte oldButtonState = HIGH;
-int screenNumber = 0;
+const byte buttonPin = 4;
+byte buttonCounter = 0;
 byte buttonState = 0;
 
-void setup(void) {
+unsigned long previousMillis = 0;
+const long interval = 1000;
+int h=05; // Sets time
+int m=30;
+int s=00;
+int flag=1; // 1 = PM; 0 = AM
+static uint32_t last_time, now = 0; // RTC
+
+//===================================INITAL SETUP===================================
+
+void setup() {
   u8g2.begin();
   u8g2.setPowerSave(0);
   Wire.begin();
+  Serial.begin(9600);
   
-  pinMode(buttonPin, INPUT_PULLUP);
- 
+  now=millis();
+  
+  pinMode(buttonPin, INPUT);
+  pinMode(ledPin, OUTPUT);
+  pinMode(buzzer, OUTPUT);
+  
   unsigned status;
   status = bme.begin();
   
   if (ccs.begin() == false)
   {
-    Serial.print("CCS811 error.");
+    Serial.print("ccs811 failed to start");
     while (1);
-      ;
   }
+  
 }
 
-void loop()
-{
+void loop() {  timecalc();
+
+//===================================BUTTON DETECTION===================================
   buttonState = digitalRead(buttonPin);
-
-  if (buttonState == HIGH) {
-    u8g2.clear();
-    u8g2.updateDisplay();
-    oldButtonState = buttonState;
-    if (screenNumber <=5) {
-      ++screenNumber;
+    if (buttonState == HIGH) {
+      buttonCounter++;
+      digitalWrite(ledPin, HIGH);
+      delay(10);
+      u8g2.clear();
+      u8g2.updateDisplay();
+      delay(250);
     }
-    else if (screenNumber > 5) {
-     screenNumber = 1;
+    
+    else {
+    digitalWrite(ledPin, LOW);
     }
-
-    delay(250);
+    
+    if (buttonCounter > 7) {
+     buttonCounter = 1;
     }
   
-        if (screenNumber == 1)
+//======================================SCREEN MODES======================================
+
+        if (buttonCounter == 1) {
+          u8g2.clearBuffer();
+
+          u8g2.setFontMode(1);
+          u8g2.setFont(u8g2_font_ncenB08_tr);
+          u8g2.setCursor(3,128);
+          u8g2.println(h);
+          u8g2.print(":");
+          if(m<10)u8g2.print("0");
+          u8g2.println(m);
+          //u8g2.print(":"); // UNCOMMENT FOR SECONDS
+          //if(s<10)u8g2.print("0");
+          //u8g2.println(s);
+          
+          if(flag==0) u8g2.print(" AM");
+          if(flag==1) u8g2.print(" PM");
+          u8g2.sendBuffer();
+
+          u8g2.setFontMode(0);
+          u8g2.setFont(u8g2_font_cu12_hr);    
+          u8g2.clearBuffer();         // clear the internal memory once
+       }
+   else if (buttonCounter == 2)
   {
         u8g2.clearBuffer();
         int t;
         t = round(bme.readTemperature() * 100.0) / 100.0;
         u8g2.setFont(u8g2_font_ncenB08_tr);
+        //u8g2.setCursor(5,128);
+        //u8g2.println("TEM:");
         u8g2.setCursor(25,128);
         u8g2.print(t);
         u8g2.sendBuffer();
-  }
+        if (t > 38) {
+         tone(buzzer, 1046.50);
+        }
+        else {
+        noTone(buzzer);
+        }
+      }
+  
 
-  else if (screenNumber == 2)
+  else if (buttonCounter == 3)
   {
         u8g2.clearBuffer();
         int h;
         h = round((bme.readHumidity()) * 100.0) / 100.0;
         u8g2.setFont(u8g2_font_ncenB08_tr);
+        //u8g2.setCursor(5,128);
+        //u8g2.println("HUM:");
         u8g2.setCursor(25,128);
         u8g2.print(h);
         u8g2.sendBuffer();
-  }
-  else if (screenNumber == 3)
+        if (h > 95 ) {
+         tone(buzzer, 1046.50);
+        }
+        else {
+        noTone(buzzer);
+        }
+      }
+  
+  else if (buttonCounter == 4)
   {
         u8g2.clearBuffer();
         int p;
         p = round((bme.readPressure() / 100.0F) * 100.0) / 100.0;
         u8g2.setFont(u8g2_font_ncenB08_tr);
+        //u8g2.setCursor(5,128);
+        //u8g2.println("PRE:");
         u8g2.setCursor(25,128);
         u8g2.print(p);
         u8g2.sendBuffer();
-  }
-  else if (screenNumber == 4)
+        if (p >= 4053 ) {
+         tone(buzzer, 1046.50);
+        }
+        else {
+        noTone(buzzer);
+        }
+      }
+  else if (buttonCounter == 5)
   {
         u8g2.clearBuffer();
         int a;
-        a = round(bme.readAltitude(SEALEVELPRESSURE_HPA) * 100.0) / 100.0 + 65;
+        a = round(bme.readAltitude(SEALEVELPRESSURE_HPA) * 100.0) / 100.0 + 170;
         u8g2.setFont(u8g2_font_ncenB08_tr);
+        //u8g2.setCursor(5,128);
+        //u8g2.println("AlT:");
         u8g2.setCursor(25,128);
         u8g2.print(a);
         u8g2.sendBuffer();
-  }
-  else if (screenNumber == 5)
+        }
+        
+  
+  else if (buttonCounter == 6)
   {
         if (ccs.dataAvailable())
       {
@@ -115,15 +185,23 @@ void loop()
         u8g2.clearBuffer();
         int c = (ccs.getCO2());
         u8g2.setFont(u8g2_font_ncenB08_tr);
+        //u8g2.setCursor(15,128);
+        //u8g2.println("CO2:");
         u8g2.setCursor(25,128);
-        u8g2.print(c);
         float BMEtempC = bme.readTemperature();
         float BMEhumid = bme.readHumidity();
         ccs.setEnvironmentalData(BMEhumid, BMEtempC);
+        u8g2.print(c);
         u8g2.sendBuffer();
+        if (c >= 2000 ) {
+         tone(buzzer, 1046.50);
+        }
+        else {
+        noTone(buzzer);
+        }
       }
   }
-  else if (screenNumber == 6)
+  else if (buttonCounter == 7)
   {
         if (ccs.dataAvailable())
       {
@@ -131,12 +209,66 @@ void loop()
         u8g2.clearBuffer();
         int v = (ccs.getTVOC());
         u8g2.setFont(u8g2_font_ncenB08_tr);
-        u8g2.setCursor(25,128)    ;
+        //u8g2.setCursor(15,128);
+        //u8g2.println("VOC:");
+        u8g2.setCursor(25,128);
         u8g2.print(v);
         float BMEtempC = bme.readTemperature();
         float BMEhumid = bme.readHumidity();
         ccs.setEnvironmentalData(BMEhumid, BMEtempC);
         u8g2.sendBuffer();
+        if (v >= 2000 ) {
+         tone(buzzer, 1046.50);
+        }
+        else {
+        noTone(buzzer);
+        }
       }
+    }
   }
+
+//===================================TIME CALCULATION===================================
+
+void timecalc() {
+  unsigned long currentMillis = millis();
+  if (currentMillis - previousMillis >= interval) {
+
+    previousMillis = currentMillis;
+
+    
+  if(s==60){
+  s=0;
+  m=m+1;
+ }
+ if(m==60)
+ {
+  m=0;
+  h=h+1;
+ }
+ if(h==13)
+ {
+  h=1;
+  flag=flag+1;
+  if(flag==2)flag=0;
+ }
+
+ s=s+1;
+    
+
+ if(s==60){
+  s=0;
+  m=m+1;
+ }
+ if(m==60)
+ {
+  m=0;
+  h=h+1;
+ }
+ if(h==13)
+ {
+  h=1;
+  flag=flag+1;
+  if(flag==2)flag=0;
+  }
+ }
 }
